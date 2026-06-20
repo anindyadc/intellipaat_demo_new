@@ -5,7 +5,7 @@ import { secretsApi, envsApi, projectsApi } from '../api/client'
 import { useAuth } from '../hooks/useAuth'
 import {
   Plus, Eye, EyeOff, Pencil, Trash2, ArrowLeft, Download, Upload,
-  Copy, Check, X, History, Key
+  Copy, Check, X, History, Key, RefreshCw
 } from 'lucide-react'
 import type { Secret, Environment, Project } from '../types'
 
@@ -241,9 +241,19 @@ function ImportModal({ projectId, envId, onClose }: { projectId: string; envId: 
 export default function EnvironmentDetail() {
   const { projectId, envId } = useParams<{ projectId: string; envId: string }>()
   const { isEditor, isAdmin } = useAuth()
+  const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [search, setSearch] = useState('')
+  const [reevalResult, setReevalResult] = useState<{ changed: number; unchanged: number } | null>(null)
+
+  const reevaluateMutation = useMutation({
+    mutationFn: () => secretsApi.reevaluateSensitive(projectId!, envId!),
+    onSuccess: (res) => {
+      setReevalResult(res.data)
+      qc.invalidateQueries({ queryKey: ['secrets', envId] })
+    },
+  })
 
   const { data: project } = useQuery<Project>({
     queryKey: ['project', projectId],
@@ -289,7 +299,7 @@ export default function EnvironmentDetail() {
           </div>
           <p className="text-gray-400 text-sm mt-0.5">{secrets.length} secret{secrets.length !== 1 ? 's' : ''}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
           <button onClick={handleExport} className="btn-secondary">
             <Download size={15} /> Export .env
           </button>
@@ -298,6 +308,15 @@ export default function EnvironmentDetail() {
               <button onClick={() => setShowImport(true)} className="btn-secondary">
                 <Upload size={15} /> Import
               </button>
+              <button
+                onClick={() => { setReevalResult(null); reevaluateMutation.mutate() }}
+                disabled={reevaluateMutation.isPending}
+                title="Re-evaluate which keys should be masked based on their name (PASSWORD, KEY, TOKEN, etc.)"
+                className="btn-secondary"
+              >
+                <RefreshCw size={15} className={reevaluateMutation.isPending ? 'animate-spin' : ''} />
+                Fix Sensitive Flags
+              </button>
               <button onClick={() => setShowAdd(true)} className="btn-primary">
                 <Plus size={16} /> Add Secret
               </button>
@@ -305,6 +324,17 @@ export default function EnvironmentDetail() {
           )}
         </div>
       </div>
+
+      {reevalResult && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between text-sm text-green-800">
+          <span>
+            <strong>Sensitive flags updated:</strong> {reevalResult.changed} changed, {reevalResult.unchanged} already correct.
+          </span>
+          <button onClick={() => setReevalResult(null)} className="text-green-600 hover:text-green-800 ml-4">
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
       <div className="card overflow-hidden">
         <div className="p-4 border-b flex items-center gap-3">

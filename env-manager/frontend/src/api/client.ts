@@ -77,6 +77,8 @@ export const secretsApi = {
       { env_content: content },
       { params: { overwrite } }
     ),
+  reevaluateSensitive: (projectId: string, envId: string) =>
+    api.post(`/projects/${projectId}/environments/${envId}/secrets/reevaluate-sensitive`),
 }
 
 // Audit

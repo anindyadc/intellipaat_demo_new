@@ -306,3 +306,29 @@ async def import_dotenv(
     await log_action(db, current_user.id, "IMPORT", "environment", env_id,
                      detail=f"created={created} updated={updated} skipped={skipped}")
     return {"created": created, "updated": updated, "skipped": skipped}
+
+
+@router.post("/reevaluate-sensitive", response_model=dict)
+async def reevaluate_sensitive(
+    project_id: str,
+    env_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_editor),
+):
+    """Re-evaluate the sensitive flag for all secrets based on key name patterns."""
+    await _get_env_or_404(env_id, project_id, db)
+    result = await db.execute(select(Secret).where(Secret.environment_id == env_id))
+    secrets = result.scalars().all()
+
+    changed = unchanged = 0
+    for secret in secrets:
+        should_be = _auto_sensitive(secret.key)
+        if secret.is_sensitive != should_be:
+            secret.is_sensitive = should_be
+            changed += 1
+        else:
+            unchanged += 1
+
+    await log_action(db, current_user.id, "UPDATE", "environment", env_id,
+                     detail=f"reevaluate-sensitive changed={changed} unchanged={unchanged}")
+    return {"changed": changed, "unchanged": unchanged}
