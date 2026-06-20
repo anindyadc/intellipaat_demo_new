@@ -16,6 +16,19 @@ from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/projects/{project_id}/environments/{env_id}/secrets", tags=["secrets"])
 
+# Keys containing these words are auto-marked sensitive on import
+_SENSITIVE_PATTERNS = {
+    'PASSWORD', 'PASSWD', 'PWD', 'SECRET', 'KEY', 'TOKEN',
+    'CREDENTIAL', 'PRIVATE', 'AUTH', 'CERT', 'SSL', 'SIGNATURE',
+    'ACCESS', 'API_KEY', 'APIKEY',
+}
+
+
+def _auto_sensitive(key: str) -> bool:
+    """Return True if the key name suggests it holds a sensitive value."""
+    key_upper = key.upper()
+    return any(pattern in key_upper for pattern in _SENSITIVE_PATTERNS)
+
 
 def _mask(value: str) -> str:
     if len(value) <= 4:
@@ -30,7 +43,8 @@ def _serialize_secret(secret: Secret, user: User, reveal: bool = False) -> Secre
     except Exception:
         plaintext = "[decryption error]"
 
-    show_value = plaintext if (reveal or not secret.is_sensitive or user.role == UserRole.admin) else _mask(plaintext)
+    # Sensitive values are always masked unless the caller explicitly requests reveal
+    show_value = plaintext if (reveal or not secret.is_sensitive) else _mask(plaintext)
     return SecretResponse(
         id=secret.id,
         key=secret.key,
@@ -256,6 +270,8 @@ async def import_dotenv(
             skipped += 1
             continue
 
+        sensitive = _auto_sensitive(key)
+
         existing_result = await db.execute(
             select(Secret).where(Secret.environment_id == env_id, Secret.key == key)
         )
@@ -271,6 +287,7 @@ async def import_dotenv(
                 )
                 db.add(version_entry)
                 existing.encrypted_value = enc.encrypt(value)
+                existing.is_sensitive = sensitive
                 existing.version += 1
                 updated += 1
             else:
@@ -279,7 +296,7 @@ async def import_dotenv(
             secret = Secret(
                 key=key,
                 encrypted_value=enc.encrypt(value),
-                is_sensitive=True,
+                is_sensitive=sensitive,
                 environment_id=env_id,
                 created_by=current_user.id,
             )
