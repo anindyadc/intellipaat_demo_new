@@ -42,7 +42,7 @@ async def login(payload: UserLogin, request: Request, db: AsyncSession = Depends
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    user.last_login = datetime.now(timezone.utc)
+    user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
     token = create_access_token({"sub": user.id, "email": user.email, "role": user.role})
     ip = request.client.host if request.client else None
     await log_action(db, user.id, "LOGIN", "user", user.id, user.email, ip_address=ip)

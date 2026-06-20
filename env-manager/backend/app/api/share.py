@@ -104,7 +104,7 @@ async def create_share_link(
     await _require_env_member(project_id, env_id, current_user, db)
 
     hours = max(1, min(payload.hours, 24 * 30))  # 1h – 30d
-    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=hours)
+    expires_at = datetime.utcnow() + timedelta(hours=hours)
 
     link = ShareLink(
         environment_id=env_id,
