@@ -1,17 +1,33 @@
 version: "3.9"
 
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-envmgr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_DB: ${POSTGRES_DB:-envmanager}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-envmgr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
+      - "127.0.0.1:8000:8000"   # bind to localhost only — nginx fronts it
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:////app/data/envmanager.db
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
-      - ALLOWED_ORIGINS=["http://localhost:5173","http://localhost","http://frontend"]
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-envmgr}:${POSTGRES_PASSWORD:-changeme123}@db/${POSTGRES_DB:-envmanager}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      ALLOWED_ORIGINS: '["http://localhost","https://${DOMAIN:-localhost}","http://${SERVER_IP:-localhost}"]'
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -22,10 +38,10 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"     # bind to localhost only — nginx fronts it
     depends_on:
       - backend
     restart: unless-stopped
 
 volumes:
-  data:
+  pgdata:
