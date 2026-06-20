@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.database import init_db
-from app.api import auth, projects, environments, secrets, audit
+from app.api import auth, projects, environments, secrets, audit, members, share
 
 settings = get_settings()
 
@@ -35,6 +35,8 @@ app.include_router(projects.router, prefix="/api/v1")
 app.include_router(environments.router, prefix="/api/v1")
 app.include_router(secrets.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
+app.include_router(members.router, prefix="/api/v1")
+app.include_router(share.router, prefix="/api/v1")
 
 
 @app.get("/health")

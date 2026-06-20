@@ -5,9 +5,10 @@ import { secretsApi, envsApi, projectsApi } from '../api/client'
 import { useAuth } from '../hooks/useAuth'
 import {
   Plus, Eye, EyeOff, Pencil, Trash2, ArrowLeft, Download, Upload,
-  Copy, Check, X, History, Key, RefreshCw
+  Copy, Check, X, History, Key, RefreshCw, Link2
 } from 'lucide-react'
 import type { Secret, Environment, Project } from '../types'
+import ShareLinkModal from '../components/ShareLinkModal'
 
 function SecretRow({ secret, projectId, envId, canEdit }: {
   secret: Secret; projectId: string; envId: string; canEdit: boolean
@@ -244,6 +245,7 @@ export default function EnvironmentDetail() {
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showShareLinks, setShowShareLinks] = useState(false)
   const [search, setSearch] = useState('')
   const [reevalResult, setReevalResult] = useState<{ changed: number; unchanged: number } | null>(null)
 
@@ -302,6 +304,9 @@ export default function EnvironmentDetail() {
         <div className="flex gap-2 flex-wrap justify-end">
           <button onClick={handleExport} className="btn-secondary">
             <Download size={15} /> Export .env
+          </button>
+          <button onClick={() => setShowShareLinks(true)} className="btn-secondary">
+            <Link2 size={15} /> Share Link
           </button>
           {isEditor && (
             <>
@@ -378,6 +383,14 @@ export default function EnvironmentDetail() {
 
       {showAdd && <AddSecretModal projectId={projectId!} envId={envId!} onClose={() => setShowAdd(false)} />}
       {showImport && <ImportModal projectId={projectId!} envId={envId!} onClose={() => setShowImport(false)} />}
+      {showShareLinks && env && (
+        <ShareLinkModal
+          projectId={projectId!}
+          envId={envId!}
+          envName={env.name}
+          onClose={() => setShowShareLinks(false)}
+        />
+      )}
     </div>
   )
 }

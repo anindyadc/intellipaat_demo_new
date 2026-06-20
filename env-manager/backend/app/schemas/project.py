@@ -39,5 +39,6 @@ class ProjectResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     environment_count: int = 0
+    member_count: int = 0
 
     model_config = {"from_attributes": True}

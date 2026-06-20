@@ -81,6 +81,29 @@ export const secretsApi = {
     api.post(`/projects/${projectId}/environments/${envId}/secrets/reevaluate-sensitive`),
 }
 
+// Members
+export const membersApi = {
+  list: (projectId: string) => api.get(`/projects/${projectId}/members`),
+  add: (projectId: string, email: string, role: string) =>
+    api.post(`/projects/${projectId}/members`, { email, role }),
+  updateRole: (projectId: string, memberId: string, role: string) =>
+    api.patch(`/projects/${projectId}/members/${memberId}`, { role }),
+  remove: (projectId: string, memberId: string) =>
+    api.delete(`/projects/${projectId}/members/${memberId}`),
+}
+
+// Share links
+export const shareLinksApi = {
+  create: (projectId: string, envId: string, hours: number, note?: string) =>
+    api.post(`/projects/${projectId}/environments/${envId}/share-links`, { hours, note }),
+  list: (projectId: string, envId: string) =>
+    api.get(`/projects/${projectId}/environments/${envId}/share-links`),
+  revoke: (projectId: string, envId: string, linkId: string) =>
+    api.delete(`/projects/${projectId}/environments/${envId}/share-links/${linkId}`),
+  getPublic: (token: string) =>
+    api.get(`/share/${token}`),
+}
+
 // Audit
 export const auditApi = {
   list: (params?: object) => api.get('/audit', { params }),

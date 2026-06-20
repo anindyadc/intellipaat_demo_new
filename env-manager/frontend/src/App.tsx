@@ -9,6 +9,7 @@ import ProjectDetail from './pages/ProjectDetail'
 import EnvironmentDetail from './pages/EnvironmentDetail'
 import AuditLogs from './pages/AuditLogs'
 import TeamManagement from './pages/TeamManagement'
+import ShareView from './pages/ShareView'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -22,6 +23,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/share/:token" element={<ShareView />} />
         <Route
           path="/"
           element={<ProtectedRoute><Layout /></ProtectedRoute>}

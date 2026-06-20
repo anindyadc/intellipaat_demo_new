@@ -59,6 +59,26 @@ export interface AuditLog {
   timestamp: string
 }
 
+export interface ProjectMember {
+  id: string
+  user_id: string
+  email: string
+  full_name: string
+  role: UserRole
+  added_at: string
+}
+
+export interface ShareLink {
+  id: string
+  token: string
+  environment_id: string
+  project_id: string
+  expires_at: string
+  note: string | null
+  view_count: number
+  created_at: string
+}
+
 export interface TokenResponse {
   access_token: string
   token_type: string

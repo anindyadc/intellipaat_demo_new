@@ -32,3 +32,7 @@ class Project(Base):
     environments: Mapped[list["Environment"]] = relationship(  # noqa
         "Environment", back_populates="project", cascade="all, delete-orphan"
     )
+    members: Mapped[list["ProjectMember"]] = relationship(  # noqa
+        "ProjectMember", back_populates="project", cascade="all, delete-orphan",
+        foreign_keys="ProjectMember.project_id"
+    )

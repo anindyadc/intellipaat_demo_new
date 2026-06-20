@@ -3,8 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { projectsApi, envsApi } from '../api/client'
 import { useAuth } from '../hooks/useAuth'
-import { Plus, ChevronRight, Pencil, Trash2, ArrowLeft, X, Server } from 'lucide-react'
+import { Plus, ChevronRight, Pencil, Trash2, ArrowLeft, X, Server, Users } from 'lucide-react'
 import type { Project, Environment, EnvironmentType } from '../types'
+import ShareModal from '../components/ShareModal'
 
 const envTypeBadge: Record<string, string> = {
   production: 'bg-red-100 text-red-700',
@@ -66,6 +67,7 @@ export default function ProjectDetail() {
   const { isEditor } = useAuth()
   const qc = useQueryClient()
   const [modal, setModal] = useState<'create' | Environment | null>(null)
+  const [showShare, setShowShare] = useState(false)
 
   const { data: project } = useQuery<Project>({
     queryKey: ['project', projectId],
@@ -102,6 +104,12 @@ export default function ProjectDetail() {
                 {project.server_host && <span>{project.server_host}</span>}
               </div>
             </div>
+            <button
+              onClick={() => setShowShare(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Users size={15} /> Share Project
+            </button>
           </div>
         </div>
       )}
@@ -169,6 +177,13 @@ export default function ProjectDetail() {
           projectId={projectId!}
           env={modal === 'create' ? undefined : modal}
           onClose={() => setModal(null)}
+        />
+      )}
+      {showShare && project && (
+        <ShareModal
+          projectId={projectId!}
+          projectName={project.name}
+          onClose={() => setShowShare(false)}
         />
       )}
     </div>
