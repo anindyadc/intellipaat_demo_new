@@ -205,6 +205,13 @@ docker compose logs backend --tail=30
 
 **Access the app** at `http://<server-ip>:8080`
 
+| Port | What | Who uses it |
+|---|---|---|
+| `8080` | Web UI + API (via nginx proxy) | Browser |
+| `8000` | Backend API directly | CLI tool, Swagger docs, direct API calls |
+
+Swagger UI (direct): `http://<server-ip>:8000/docs`
+
 #### Managing the deployment
 
 ```bash
@@ -334,8 +341,8 @@ A zero-dependency Python CLI for developer workflows. Requires only Python 3 std
 cp env-manager/cli/envmanager.py /usr/local/bin/envmanager
 chmod +x /usr/local/bin/envmanager
 
-# Point it at your server
-export ENV_MANAGER_API=http://10.10.10.102:8080/api/v1
+# Point it at the backend API port (8000 is directly accessible)
+export ENV_MANAGER_API=http://10.10.10.102:8000/api/v1
 # (add this to ~/.zshrc or ~/.bashrc to make it permanent)
 ```
 

@@ -17,12 +17,12 @@ services:
   backend:
     build: ./backend
     ports:
-      - "127.0.0.1:8000:8000"   # bind to localhost only — nginx fronts it
+      - "8000:8000"   # API accessible externally for CLI and direct access
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-envmgr}:${POSTGRES_PASSWORD:-changeme123}@db/${POSTGRES_DB:-envmanager}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
-      ALLOWED_ORIGINS: '["http://localhost","https://${DOMAIN:-localhost}","http://${SERVER_IP:-localhost}"]'
+      ALLOWED_ORIGINS: '["http://localhost","http://localhost:8080","http://${SERVER_IP:-10.10.10.102}","http://${SERVER_IP:-10.10.10.102}:8080","https://${DOMAIN:-localhost}"]'
     depends_on:
       db:
         condition: service_healthy
