@@ -35,3 +35,24 @@ async def init_db():
     async with engine.begin() as conn:
         from app.models import user, project, environment, secret, audit, project_member, share_link, ssh_credential  # noqa
         await conn.run_sync(Base.metadata.create_all)
+        await _migrate(conn)
+
+
+async def _migrate(conn):
+    """Add columns that didn't exist in earlier schema versions."""
+    is_pg = "postgresql" in str(settings.database_url)
+    if is_pg:
+        migrations = [
+            "ALTER TABLE ssh_credentials ADD COLUMN IF NOT EXISTS auth_type VARCHAR NOT NULL DEFAULT 'key'",
+            "ALTER TABLE ssh_credentials ADD COLUMN IF NOT EXISTS encrypted_password TEXT",
+            "ALTER TABLE ssh_credentials ALTER COLUMN encrypted_private_key DROP NOT NULL",
+        ]
+    else:
+        # SQLite doesn't support ALTER COLUMN or IF NOT EXISTS — skip silently;
+        # create_all already handles fresh SQLite DBs correctly.
+        return
+    for sql in migrations:
+        try:
+            await conn.exec_driver_sql(sql)
+        except Exception:
+            pass
