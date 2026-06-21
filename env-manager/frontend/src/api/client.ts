@@ -79,6 +79,11 @@ export const secretsApi = {
     ),
   reevaluateSensitive: (projectId: string, envId: string) =>
     api.post(`/projects/${projectId}/environments/${envId}/secrets/reevaluate-sensitive`),
+  sshFetch: (
+    projectId: string,
+    envId: string,
+    params: { host: string; port: number; username: string; private_key: string; path: string }
+  ) => api.post(`/projects/${projectId}/environments/${envId}/secrets/fetch/ssh`, params),
 }
 
 // Members

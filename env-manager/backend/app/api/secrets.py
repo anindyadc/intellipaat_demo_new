@@ -1,5 +1,8 @@
+import asyncio
+import io
 import re
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -306,6 +309,73 @@ async def import_dotenv(
     await log_action(db, current_user.id, "IMPORT", "environment", env_id,
                      detail=f"created={created} updated={updated} skipped={skipped}")
     return {"created": created, "updated": updated, "skipped": skipped}
+
+
+class SSHFetchRequest(BaseModel):
+    host: str
+    port: int = 22
+    username: str
+    private_key: str
+    path: str
+
+
+def _ssh_read_file(host: str, port: int, username: str, private_key_text: str, path: str) -> str:
+    """Blocking SSH/SFTP read — runs inside asyncio.to_thread."""
+    try:
+        import paramiko
+    except ImportError:
+        raise RuntimeError("paramiko is not installed")
+
+    key_file = io.StringIO(private_key_text.strip())
+    pkey = paramiko.PKey.from_private_key(key_file)
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    try:
+        client.connect(host, port=port, username=username, pkey=pkey, timeout=10,
+                       allow_agent=False, look_for_keys=False)
+        sftp = client.open_sftp()
+        try:
+            with sftp.open(path) as fh:
+                return fh.read().decode("utf-8")
+        finally:
+            sftp.close()
+    finally:
+        client.close()
+
+
+@router.post("/fetch/ssh", response_model=dict)
+async def fetch_from_ssh(
+    project_id: str,
+    env_id: str,
+    payload: SSHFetchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_editor),
+):
+    """Fetch raw .env file content from a remote server over SSH. Credentials are never stored."""
+    await _get_env_or_404(env_id, project_id, db)
+
+    # Prevent path traversal
+    if ".." in payload.path:
+        raise HTTPException(status_code=400, detail="Path must not contain '..'")
+
+    try:
+        content = await asyncio.wait_for(
+            asyncio.to_thread(
+                _ssh_read_file,
+                payload.host, payload.port, payload.username,
+                payload.private_key, payload.path,
+            ),
+            timeout=20,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="SSH connection timed out")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"SSH error: {exc}")
+
+    await log_action(db, current_user.id, "READ", "environment", env_id,
+                     detail=f"ssh-fetch host={payload.host} path={payload.path}")
+    return {"content": content}
 
 
 @router.post("/reevaluate-sensitive", response_model=dict)

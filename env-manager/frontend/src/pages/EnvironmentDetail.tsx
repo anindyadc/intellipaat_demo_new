@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import type { Secret, Environment, Project } from '../types'
 import ShareLinkModal from '../components/ShareLinkModal'
+import SSHImportModal from '../components/SSHImportModal'
 
 function SecretRow({ secret, projectId, envId, canEdit }: {
   secret: Secret; projectId: string; envId: string; canEdit: boolean
@@ -246,6 +247,7 @@ export default function EnvironmentDetail() {
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showShareLinks, setShowShareLinks] = useState(false)
+  const [showSSHImport, setShowSSHImport] = useState(false)
   const [search, setSearch] = useState('')
   const [reevalResult, setReevalResult] = useState<{ changed: number; unchanged: number } | null>(null)
 
@@ -311,7 +313,10 @@ export default function EnvironmentDetail() {
           {isEditor && (
             <>
               <button onClick={() => setShowImport(true)} className="btn-secondary">
-                <Upload size={15} /> Import
+                <Upload size={15} /> Import .env
+              </button>
+              <button onClick={() => setShowSSHImport(true)} className="btn-secondary">
+                <Upload size={15} /> Import from SSH
               </button>
               <button
                 onClick={() => { setReevalResult(null); reevaluateMutation.mutate() }}
@@ -383,6 +388,7 @@ export default function EnvironmentDetail() {
 
       {showAdd && <AddSecretModal projectId={projectId!} envId={envId!} onClose={() => setShowAdd(false)} />}
       {showImport && <ImportModal projectId={projectId!} envId={envId!} onClose={() => setShowImport(false)} />}
+      {showSSHImport && <SSHImportModal projectId={projectId!} envId={envId!} onClose={() => setShowSSHImport(false)} />}
       {showShareLinks && env && (
         <ShareLinkModal
           projectId={projectId!}
