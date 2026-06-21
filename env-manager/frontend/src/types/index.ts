@@ -30,6 +30,8 @@ export interface Environment {
   name: string
   env_type: EnvironmentType
   project_id: string
+  ssh_credential_id: string | null
+  remote_path: string | null
   created_at: string
   updated_at: string
   secret_count: number

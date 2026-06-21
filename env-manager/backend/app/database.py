@@ -46,6 +46,8 @@ async def _migrate(conn):
             "ALTER TABLE ssh_credentials ADD COLUMN IF NOT EXISTS auth_type VARCHAR NOT NULL DEFAULT 'key'",
             "ALTER TABLE ssh_credentials ADD COLUMN IF NOT EXISTS encrypted_password TEXT",
             "ALTER TABLE ssh_credentials ALTER COLUMN encrypted_private_key DROP NOT NULL",
+            "ALTER TABLE environments ADD COLUMN IF NOT EXISTS ssh_credential_id VARCHAR",
+            "ALTER TABLE environments ADD COLUMN IF NOT EXISTS remote_path VARCHAR",
         ]
     else:
         # SQLite doesn't support ALTER COLUMN or IF NOT EXISTS — skip silently;

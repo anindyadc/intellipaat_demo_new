@@ -388,7 +388,7 @@ export default function EnvironmentDetail() {
 
       {showAdd && <AddSecretModal projectId={projectId!} envId={envId!} onClose={() => setShowAdd(false)} />}
       {showImport && <ImportModal projectId={projectId!} envId={envId!} onClose={() => setShowImport(false)} />}
-      {showSSHImport && <SSHImportModal projectId={projectId!} envId={envId!} onClose={() => setShowSSHImport(false)} />}
+      {showSSHImport && env && <SSHImportModal projectId={projectId!} envId={envId!} env={env} onClose={() => setShowSSHImport(false)} />}
       {showShareLinks && env && (
         <ShareLinkModal
           projectId={projectId!}

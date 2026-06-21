@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { secretsApi, sshCredentialsApi } from '../api/client'
-import type { SSHCredential } from '../types'
+import { secretsApi, sshCredentialsApi, envsApi } from '../api/client'
+import type { SSHCredential, Environment } from '../types'
 import { X, Terminal, ChevronRight, Upload, Server, Link, KeyRound, Lock } from 'lucide-react'
 
 interface Props {
   projectId: string
   envId: string
+  env: Environment
   onClose: () => void
 }
 
@@ -14,14 +15,14 @@ type Step = 'connect' | 'preview'
 type Mode = 'saved' | 'manual'
 type AuthType = 'key' | 'password'
 
-export default function SSHImportModal({ projectId, envId, onClose }: Props) {
+export default function SSHImportModal({ projectId, envId, env, onClose }: Props) {
   const qc = useQueryClient()
   const [step, setStep] = useState<Step>('connect')
-  const [mode, setMode] = useState<Mode>('saved')
+  const [mode, setMode] = useState<Mode>(env.ssh_credential_id ? 'saved' : 'saved')
 
-  // Saved-credential mode
-  const [selectedCredId, setSelectedCredId] = useState('')
-  const [remotePath, setRemotePath] = useState('')
+  // Saved-credential mode — pre-fill from environment's saved SSH config
+  const [selectedCredId, setSelectedCredId] = useState(env.ssh_credential_id ?? '')
+  const [remotePath, setRemotePath] = useState(env.remote_path ?? '')
 
   // Manual mode
   const [manual, setManual] = useState({
@@ -40,11 +41,25 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
     queryFn: () => sshCredentialsApi.list().then(r => r.data),
   })
 
+  // When credentials load, if env has a saved credential_id ensure mode is 'saved'
+  useEffect(() => {
+    if (env.ssh_credential_id && credentials.length > 0) {
+      setMode('saved')
+    }
+  }, [credentials, env.ssh_credential_id])
+
   const selectedCred = credentials.find(c => c.id === selectedCredId)
 
   const setManualField = (field: keyof typeof manual) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => setManual(m => ({ ...m, [field]: field === 'port' ? Number(e.target.value) : e.target.value }))
+
+  // Save ssh config back to the environment after a successful import
+  const saveEnvConfig = useMutation({
+    mutationFn: (data: { ssh_credential_id?: string; remote_path?: string }) =>
+      envsApi.update(projectId, envId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['environment', projectId, envId] }),
+  })
 
   const fetchMutation = useMutation({
     mutationFn: () => {
@@ -71,6 +86,13 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
     onSuccess: (res) => {
       setImportResult(res.data)
       qc.invalidateQueries({ queryKey: ['secrets', envId] })
+      // Persist the SSH config that worked back to the environment
+      if (mode === 'saved' && selectedCredId) {
+        saveEnvConfig.mutate({ ssh_credential_id: selectedCredId, remote_path: remotePath })
+      } else if (mode === 'manual') {
+        // For manual mode, only save the path (no credential to save)
+        saveEnvConfig.mutate({ remote_path: manual.path })
+      }
     },
     onError: (err: any) => setFetchError(err.response?.data?.detail || 'Import failed'),
   })
@@ -122,24 +144,19 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-gray-400 mb-4">Server config saved to this environment for next time.</p>
               <button className="btn-primary" onClick={onClose}>Done</button>
             </div>
           ) : step === 'connect' ? (
             <form onSubmit={e => { e.preventDefault(); fetchMutation.mutate() }} className="space-y-5">
               {/* Mode toggle */}
               <div className="flex rounded-lg border overflow-hidden text-sm">
-                <button
-                  type="button"
-                  onClick={() => setMode('saved')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${mode === 'saved' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
+                <button type="button" onClick={() => setMode('saved')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${mode === 'saved' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <Server size={14} /> Use Saved Server
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('manual')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${mode === 'manual' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
+                <button type="button" onClick={() => setMode('manual')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${mode === 'manual' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <Terminal size={14} /> Enter Manually
                 </button>
               </div>
@@ -158,12 +175,8 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
                   ) : (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Select server *</label>
-                      <select
-                        className="input"
-                        required
-                        value={selectedCredId}
-                        onChange={e => setSelectedCredId(e.target.value)}
-                      >
+                      <select className="input" required value={selectedCredId}
+                        onChange={e => setSelectedCredId(e.target.value)}>
                         <option value="">— choose a server —</option>
                         {credentials.map(c => (
                           <option key={c.id} value={c.id}>
@@ -171,17 +184,17 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
                           </option>
                         ))}
                       </select>
-                      {selectedCred && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Private key stored encrypted — will not be sent to the browser.
-                        </p>
-                      )}
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Remote file path *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Remote .env path *</label>
                     <input className="input font-mono" required placeholder="/home/ubuntu/myapp/.env"
                       value={remotePath} onChange={e => setRemotePath(e.target.value)} />
+                    {env.ssh_credential_id === selectedCredId && env.remote_path && (
+                      <p className="text-xs text-green-600 mt-1">
+                        ✓ Pre-filled from this environment's saved config
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -238,7 +251,7 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Remote file path *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Remote .env path *</label>
                     <input className="input font-mono" required placeholder="/home/ubuntu/myapp/.env"
                       value={manual.path} onChange={setManualField('path')} />
                   </div>
@@ -271,13 +284,8 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">File content preview</label>
-                <textarea
-                  className="input font-mono text-xs resize-none bg-gray-50"
-                  rows={12}
-                  value={content}
-                  onChange={e => setContent(e.target.value)}
-                  spellCheck={false}
-                />
+                <textarea className="input font-mono text-xs resize-none bg-gray-50" rows={12}
+                  value={content} onChange={e => setContent(e.target.value)} spellCheck={false} />
                 <p className="text-xs text-gray-400 mt-1">You can edit the content before importing.</p>
               </div>
 
@@ -293,11 +301,8 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
 
               <div className="flex justify-end gap-3">
                 <button onClick={onClose} className="btn-secondary">Cancel</button>
-                <button
-                  onClick={() => importMutation.mutate()}
-                  disabled={!content.trim() || importMutation.isPending}
-                  className="btn-primary"
-                >
+                <button onClick={() => importMutation.mutate()}
+                  disabled={!content.trim() || importMutation.isPending} className="btn-primary">
                   <Upload size={15} />
                   {importMutation.isPending ? 'Importing…' : 'Import Secrets'}
                 </button>
