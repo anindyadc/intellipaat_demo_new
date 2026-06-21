@@ -316,7 +316,7 @@ export default function EnvironmentDetail() {
                 <Upload size={15} /> Import .env
               </button>
               <button onClick={() => setShowSSHImport(true)} className="btn-secondary">
-                <Upload size={15} /> Import from SSH
+                <Upload size={15} /> Import from Server
               </button>
               <button
                 onClick={() => { setReevalResult(null); reevaluateMutation.mutate() }}

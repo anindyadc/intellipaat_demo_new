@@ -64,7 +64,7 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
         <div className="flex items-center justify-between p-5 border-b flex-shrink-0">
           <div className="flex items-center gap-2">
             <Terminal size={18} className="text-brand-600" />
-            <h2 className="font-semibold text-lg">Import from SSH Server</h2>
+            <h2 className="font-semibold text-lg">Import from Server</h2>
           </div>
           <button onClick={onClose}><X size={20} className="text-gray-400 hover:text-gray-600" /></button>
         </div>
