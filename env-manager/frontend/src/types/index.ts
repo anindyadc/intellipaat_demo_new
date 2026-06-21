@@ -79,6 +79,15 @@ export interface ShareLink {
   created_at: string
 }
 
+export interface SSHCredential {
+  id: string
+  label: string
+  host: string
+  port: number
+  username: string
+  has_key: boolean
+}
+
 export interface TokenResponse {
   access_token: string
   token_type: string

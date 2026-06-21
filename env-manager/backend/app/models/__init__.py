@@ -5,6 +5,7 @@ from app.models.secret import Secret, SecretVersion
 from app.models.audit import AuditLog
 from app.models.project_member import ProjectMember
 from app.models.share_link import ShareLink
+from app.models.ssh_credential import SSHCredential
 
 __all__ = [
     "User", "UserRole",
@@ -14,4 +15,5 @@ __all__ = [
     "AuditLog",
     "ProjectMember",
     "ShareLink",
+    "SSHCredential",
 ]

@@ -10,6 +10,7 @@ import EnvironmentDetail from './pages/EnvironmentDetail'
 import AuditLogs from './pages/AuditLogs'
 import TeamManagement from './pages/TeamManagement'
 import ShareView from './pages/ShareView'
+import SSHServers from './pages/SSHServers'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:projectId" element={<ProjectDetail />} />
           <Route path="projects/:projectId/environments/:envId" element={<EnvironmentDetail />} />
+          <Route path="ssh-servers" element={<SSHServers />} />
           <Route path="audit" element={<AuditLogs />} />
           <Route path="team" element={<TeamManagement />} />
         </Route>

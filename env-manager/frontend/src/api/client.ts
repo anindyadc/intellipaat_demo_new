@@ -82,7 +82,11 @@ export const secretsApi = {
   sshFetch: (
     projectId: string,
     envId: string,
-    params: { host: string; port: number; username: string; private_key: string; path: string }
+    params: {
+      credential_id?: string
+      host?: string; port?: number; username?: string; private_key?: string
+      path: string
+    }
   ) => api.post(`/projects/${projectId}/environments/${envId}/secrets/fetch/ssh`, params),
 }
 
@@ -107,6 +111,15 @@ export const shareLinksApi = {
     api.delete(`/projects/${projectId}/environments/${envId}/share-links/${linkId}`),
   getPublic: (token: string) =>
     api.get(`/share/${token}`),
+}
+
+// SSH Credentials
+export const sshCredentialsApi = {
+  list: () => api.get('/ssh-credentials'),
+  create: (data: { label: string; host: string; port: number; username: string; private_key: string }) =>
+    api.post('/ssh-credentials', data),
+  update: (id: string, data: object) => api.patch(`/ssh-credentials/${id}`, data),
+  delete: (id: string) => api.delete(`/ssh-credentials/${id}`),
 }
 
 // Audit

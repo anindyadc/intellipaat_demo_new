@@ -312,10 +312,12 @@ async def import_dotenv(
 
 
 class SSHFetchRequest(BaseModel):
-    host: str
+    # Either credential_id (saved server) OR inline connection fields must be provided
+    credential_id: str | None = None
+    host: str | None = None
     port: int = 22
-    username: str
-    private_key: str
+    username: str | None = None
+    private_key: str | None = None
     path: str
 
 
@@ -355,17 +357,38 @@ async def fetch_from_ssh(
     """Fetch raw .env file content from a remote server over SSH. Credentials are never stored."""
     await _get_env_or_404(env_id, project_id, db)
 
-    # Prevent path traversal
     if ".." in payload.path:
         raise HTTPException(status_code=400, detail="Path must not contain '..'")
 
+    # Resolve connection params — either from a saved credential or inline fields
+    if payload.credential_id:
+        from app.models.ssh_credential import SSHCredential
+        cred_result = await db.execute(
+            select(SSHCredential).where(
+                SSHCredential.id == payload.credential_id,
+                SSHCredential.user_id == current_user.id,
+            )
+        )
+        cred = cred_result.scalar_one_or_none()
+        if not cred:
+            raise HTTPException(status_code=404, detail="SSH credential not found")
+        from app.core.encryption import get_encryption_service as _enc
+        enc2 = _enc()
+        host = cred.host
+        port = cred.port
+        username = cred.username
+        private_key = enc2.decrypt(cred.encrypted_private_key)
+    else:
+        if not payload.host or not payload.username or not payload.private_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide either credential_id or host + username + private_key",
+            )
+        host, port, username, private_key = payload.host, payload.port, payload.username, payload.private_key
+
     try:
         content = await asyncio.wait_for(
-            asyncio.to_thread(
-                _ssh_read_file,
-                payload.host, payload.port, payload.username,
-                payload.private_key, payload.path,
-            ),
+            asyncio.to_thread(_ssh_read_file, host, port, username, private_key, payload.path),
             timeout=20,
         )
     except asyncio.TimeoutError:
@@ -374,7 +397,7 @@ async def fetch_from_ssh(
         raise HTTPException(status_code=400, detail=f"SSH error: {exc}")
 
     await log_action(db, current_user.id, "READ", "environment", env_id,
-                     detail=f"ssh-fetch host={payload.host} path={payload.path}")
+                     detail=f"ssh-fetch host={host} path={payload.path}")
     return {"content": content}
 
 

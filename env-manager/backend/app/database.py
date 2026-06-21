@@ -33,5 +33,5 @@ async def get_db():
 
 async def init_db():
     async with engine.begin() as conn:
-        from app.models import user, project, environment, secret, audit, project_member, share_link  # noqa
+        from app.models import user, project, environment, secret, audit, project_member, share_link, ssh_credential  # noqa
         await conn.run_sync(Base.metadata.create_all)

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { secretsApi } from '../api/client'
-import { X, Terminal, ChevronRight, Upload } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { secretsApi, sshCredentialsApi } from '../api/client'
+import type { SSHCredential } from '../types'
+import { X, Terminal, ChevronRight, Upload, Server, Link } from 'lucide-react'
 
 interface Props {
   projectId: string
@@ -10,38 +11,52 @@ interface Props {
 }
 
 type Step = 'connect' | 'preview'
-
-const DEFAULT_PORT = 22
+type Mode = 'saved' | 'manual'
 
 export default function SSHImportModal({ projectId, envId, onClose }: Props) {
   const qc = useQueryClient()
   const [step, setStep] = useState<Step>('connect')
-  const [form, setForm] = useState({
-    host: '',
-    port: DEFAULT_PORT,
-    username: '',
-    private_key: '',
-    path: '',
+  const [mode, setMode] = useState<Mode>('saved')
+
+  // Saved-credential mode
+  const [selectedCredId, setSelectedCredId] = useState('')
+  const [remotePath, setRemotePath] = useState('')
+
+  // Manual mode
+  const [manual, setManual] = useState({
+    host: '', port: 22, username: '', private_key: '', path: '',
   })
+
   const [fetchError, setFetchError] = useState('')
   const [content, setContent] = useState('')
   const [overwrite, setOverwrite] = useState(false)
   const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number } | null>(null)
 
-  const set = (field: keyof typeof form) => (
+  const { data: credentials = [] } = useQuery<SSHCredential[]>({
+    queryKey: ['ssh-credentials'],
+    queryFn: () => sshCredentialsApi.list().then(r => r.data),
+  })
+
+  const selectedCred = credentials.find(c => c.id === selectedCredId)
+
+  const setManualField = (field: keyof typeof manual) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => setForm(f => ({ ...f, [field]: field === 'port' ? Number(e.target.value) : e.target.value }))
+  ) => setManual(m => ({ ...m, [field]: field === 'port' ? Number(e.target.value) : e.target.value }))
 
   const fetchMutation = useMutation({
-    mutationFn: () => secretsApi.sshFetch(projectId, envId, form),
+    mutationFn: () => {
+      const params =
+        mode === 'saved'
+          ? { credential_id: selectedCredId, path: remotePath }
+          : { host: manual.host, port: manual.port, username: manual.username, private_key: manual.private_key, path: manual.path }
+      return secretsApi.sshFetch(projectId, envId, params)
+    },
     onSuccess: (res) => {
       setContent(res.data.content)
       setFetchError('')
       setStep('preview')
     },
-    onError: (err: any) => {
-      setFetchError(err.response?.data?.detail || 'Connection failed')
-    },
+    onError: (err: any) => setFetchError(err.response?.data?.detail || 'Connection failed'),
   })
 
   const importMutation = useMutation({
@@ -50,11 +65,16 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
       setImportResult(res.data)
       qc.invalidateQueries({ queryKey: ['secrets', envId] })
     },
-    onError: (err: any) => {
-      setFetchError(err.response?.data?.detail || 'Import failed')
-    },
+    onError: (err: any) => setFetchError(err.response?.data?.detail || 'Import failed'),
   })
 
+  const canFetch =
+    mode === 'saved'
+      ? Boolean(selectedCredId && remotePath)
+      : Boolean(manual.host && manual.username && manual.private_key && manual.path)
+
+  const displayHost = mode === 'saved' ? (selectedCred?.host ?? '') : manual.host
+  const displayPath = mode === 'saved' ? remotePath : manual.path
   const lineCount = content.split('\n').filter(l => l.trim() && !l.trim().startsWith('#') && l.includes('=')).length
 
   return (
@@ -95,62 +115,109 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
               <button className="btn-primary" onClick={onClose}>Done</button>
             </div>
           ) : step === 'connect' ? (
-            <form
-              onSubmit={e => { e.preventDefault(); fetchMutation.mutate() }}
-              className="space-y-4"
-            >
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hostname / IP *</label>
-                  <input className="input" required placeholder="10.10.10.50"
-                    value={form.host} onChange={set('host')} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
-                  <input className="input" type="number" min={1} max={65535}
-                    value={form.port} onChange={set('port')} />
-                </div>
+            <form onSubmit={e => { e.preventDefault(); fetchMutation.mutate() }} className="space-y-5">
+              {/* Mode toggle */}
+              <div className="flex rounded-lg border overflow-hidden text-sm">
+                <button
+                  type="button"
+                  onClick={() => setMode('saved')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${mode === 'saved' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                >
+                  <Server size={14} /> Use Saved Server
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('manual')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${mode === 'manual' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                >
+                  <Terminal size={14} /> Enter Manually
+                </button>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-                <input className="input" required placeholder="ubuntu"
-                  value={form.username} onChange={set('username')} />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  SSH Private Key *
-                  <span className="font-normal text-gray-400 ml-1">(PEM — RSA, ECDSA or Ed25519)</span>
-                </label>
-                <textarea
-                  className="input font-mono text-xs resize-none"
-                  rows={7}
-                  required
-                  spellCheck={false}
-                  placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
-                  value={form.private_key}
-                  onChange={set('private_key')}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Remote file path *</label>
-                <input className="input font-mono" required placeholder="/home/ubuntu/myapp/.env"
-                  value={form.path} onChange={set('path')} />
-              </div>
+              {mode === 'saved' ? (
+                <>
+                  {credentials.length === 0 ? (
+                    <div className="text-center py-4 border border-dashed rounded-lg">
+                      <Server size={28} className="mx-auto text-gray-300 mb-2" />
+                      <p className="text-sm text-gray-500 mb-2">No saved servers yet.</p>
+                      <a href="/ssh-servers" target="_blank" rel="noopener"
+                        className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1">
+                        <Link size={13} /> Go to SSH Servers to add one
+                      </a>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Select server *</label>
+                      <select
+                        className="input"
+                        required
+                        value={selectedCredId}
+                        onChange={e => setSelectedCredId(e.target.value)}
+                      >
+                        <option value="">— choose a server —</option>
+                        {credentials.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.label} ({c.username}@{c.host}:{c.port})
+                          </option>
+                        ))}
+                      </select>
+                      {selectedCred && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Private key stored encrypted — will not be sent to the browser.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Remote file path *</label>
+                    <input className="input font-mono" required placeholder="/home/ubuntu/myapp/.env"
+                      value={remotePath} onChange={e => setRemotePath(e.target.value)} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Hostname / IP *</label>
+                      <input className="input" required placeholder="10.10.10.102"
+                        value={manual.host} onChange={setManualField('host')} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                      <input className="input" type="number" min={1} max={65535}
+                        value={manual.port} onChange={setManualField('port')} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                    <input className="input" required placeholder="ubuntu"
+                      value={manual.username} onChange={setManualField('username')} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SSH Private Key *
+                      <span className="font-normal text-gray-400 ml-1">(PEM — RSA, ECDSA or Ed25519)</span>
+                    </label>
+                    <textarea className="input font-mono text-xs resize-none" rows={6}
+                      required spellCheck={false}
+                      placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+                      value={manual.private_key} onChange={setManualField('private_key')} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Remote file path *</label>
+                    <input className="input font-mono" required placeholder="/home/ubuntu/myapp/.env"
+                      value={manual.path} onChange={setManualField('path')} />
+                  </div>
+                </>
+              )}
 
               {fetchError && (
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg">{fetchError}</p>
               )}
 
-              <p className="text-xs text-gray-400">
-                Credentials are used only for this request and are never stored.
-              </p>
-
               <div className="flex justify-end gap-3 pt-1">
                 <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-                <button type="submit" disabled={fetchMutation.isPending} className="btn-primary">
+                <button type="submit" disabled={!canFetch || fetchMutation.isPending} className="btn-primary">
                   {fetchMutation.isPending ? 'Connecting…' : 'Fetch File'}
                 </button>
               </div>
@@ -159,7 +226,7 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">
-                  Fetched from <code className="bg-gray-100 px-1 rounded text-xs">{form.host}:{form.path}</code>
+                  Fetched from <code className="bg-gray-100 px-1 rounded text-xs">{displayHost}:{displayPath}</code>
                   {' — '}<strong>{lineCount}</strong> variable{lineCount !== 1 ? 's' : ''} detected
                 </p>
                 <button onClick={() => { setStep('connect'); setFetchError('') }}

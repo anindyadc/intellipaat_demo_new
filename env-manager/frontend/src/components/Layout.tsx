@@ -1,13 +1,14 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import {
-  LayoutDashboard, FolderKanban, ShieldAlert, Users, LogOut, KeyRound, ChevronRight
+  LayoutDashboard, FolderKanban, ShieldAlert, Users, LogOut, KeyRound, ChevronRight, Server
 } from 'lucide-react'
 import clsx from 'clsx'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/projects', label: 'Projects', icon: FolderKanban },
+  { to: '/ssh-servers', label: 'SSH Servers', icon: Server },
   { to: '/audit', label: 'Audit Logs', icon: ShieldAlert, adminOnly: true },
   { to: '/team', label: 'Team', icon: Users, adminOnly: true },
 ]
