@@ -334,7 +334,7 @@ def _ssh_read_file(
         raise RuntimeError("paramiko is not installed")
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
         if private_key_text:
             pkey = paramiko.PKey.from_private_key(io.StringIO(private_key_text.strip()))
