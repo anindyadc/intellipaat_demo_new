@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Literal
 
 from app.core.dependencies import get_current_user
 from app.core.encryption import get_encryption_service
@@ -20,7 +21,9 @@ class SSHCredentialCreate(BaseModel):
     host: str
     port: int = 22
     username: str
-    private_key: str
+    auth_type: Literal["key", "password"] = "key"
+    private_key: str | None = None
+    password: str | None = None
 
 
 class SSHCredentialUpdate(BaseModel):
@@ -28,7 +31,9 @@ class SSHCredentialUpdate(BaseModel):
     host: str | None = None
     port: int | None = None
     username: str | None = None
+    auth_type: Literal["key", "password"] | None = None
     private_key: str | None = None
+    password: str | None = None
 
 
 class SSHCredentialResponse(BaseModel):
@@ -37,8 +42,8 @@ class SSHCredentialResponse(BaseModel):
     host: str
     port: int
     username: str
-    # private key is never returned — clients check `has_key` instead
-    has_key: bool = True
+    auth_type: str
+    has_credential: bool
 
     model_config = {"from_attributes": True}
 
@@ -46,14 +51,25 @@ class SSHCredentialResponse(BaseModel):
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _to_response(cred: SSHCredential) -> SSHCredentialResponse:
+    has_credential = bool(
+        cred.encrypted_private_key if cred.auth_type == "key" else cred.encrypted_password
+    )
     return SSHCredentialResponse(
         id=cred.id,
         label=cred.label,
         host=cred.host,
         port=cred.port,
         username=cred.username,
-        has_key=bool(cred.encrypted_private_key),
+        auth_type=cred.auth_type,
+        has_credential=has_credential,
     )
+
+
+def _validate_create(payload: SSHCredentialCreate) -> None:
+    if payload.auth_type == "key" and not (payload.private_key or "").strip():
+        raise HTTPException(status_code=400, detail="private_key is required for key auth")
+    if payload.auth_type == "password" and not (payload.password or "").strip():
+        raise HTTPException(status_code=400, detail="password is required for password auth")
 
 
 async def _get_own_credential(cred_id: str, user: User, db: AsyncSession) -> SSHCredential:
@@ -86,6 +102,7 @@ async def create_credential(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _validate_create(payload)
     enc = get_encryption_service()
     cred = SSHCredential(
         user_id=current_user.id,
@@ -93,12 +110,14 @@ async def create_credential(
         host=payload.host,
         port=payload.port,
         username=payload.username,
-        encrypted_private_key=enc.encrypt(payload.private_key.strip()),
+        auth_type=payload.auth_type,
+        encrypted_private_key=enc.encrypt(payload.private_key.strip()) if payload.private_key else None,
+        encrypted_password=enc.encrypt(payload.password) if payload.password else None,
     )
     db.add(cred)
     await db.flush()
     await log_action(db, current_user.id, "CREATE", "ssh_credential", cred.id, cred.label,
-                     detail=f"host={cred.host}")
+                     detail=f"host={cred.host} auth={cred.auth_type}")
     return _to_response(cred)
 
 
@@ -120,8 +139,14 @@ async def update_credential(
         cred.port = payload.port
     if payload.username is not None:
         cred.username = payload.username
-    if payload.private_key is not None:
+    if payload.auth_type is not None:
+        cred.auth_type = payload.auth_type
+    if payload.private_key is not None and payload.private_key.strip():
         cred.encrypted_private_key = enc.encrypt(payload.private_key.strip())
+        cred.encrypted_password = None
+    if payload.password is not None and payload.password:
+        cred.encrypted_password = enc.encrypt(payload.password)
+        cred.encrypted_private_key = None
 
     await log_action(db, current_user.id, "UPDATE", "ssh_credential", cred.id, cred.label)
     return _to_response(cred)

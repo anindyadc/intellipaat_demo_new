@@ -116,8 +116,10 @@ export const shareLinksApi = {
 // SSH Credentials
 export const sshCredentialsApi = {
   list: () => api.get('/ssh-credentials'),
-  create: (data: { label: string; host: string; port: number; username: string; private_key: string }) =>
-    api.post('/ssh-credentials', data),
+  create: (data: {
+    label: string; host: string; port: number; username: string
+    auth_type: 'key' | 'password'; private_key?: string; password?: string
+  }) => api.post('/ssh-credentials', data),
   update: (id: string, data: object) => api.patch(`/ssh-credentials/${id}`, data),
   delete: (id: string) => api.delete(`/ssh-credentials/${id}`),
 }

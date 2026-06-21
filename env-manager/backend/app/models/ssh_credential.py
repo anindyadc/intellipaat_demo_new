@@ -15,6 +15,9 @@ class SSHCredential(Base):
     host: Mapped[str] = mapped_column(String, nullable=False)
     port: Mapped[int] = mapped_column(Integer, default=22)
     username: Mapped[str] = mapped_column(String, nullable=False)
-    encrypted_private_key: Mapped[str] = mapped_column(Text, nullable=False)
+    # auth_type: "key" or "password"
+    auth_type: Mapped[str] = mapped_column(String, nullable=False, default="key")
+    encrypted_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

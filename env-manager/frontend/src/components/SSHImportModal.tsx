@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { secretsApi, sshCredentialsApi } from '../api/client'
 import type { SSHCredential } from '../types'
-import { X, Terminal, ChevronRight, Upload, Server, Link } from 'lucide-react'
+import { X, Terminal, ChevronRight, Upload, Server, Link, KeyRound, Lock } from 'lucide-react'
 
 interface Props {
   projectId: string
@@ -12,6 +12,7 @@ interface Props {
 
 type Step = 'connect' | 'preview'
 type Mode = 'saved' | 'manual'
+type AuthType = 'key' | 'password'
 
 export default function SSHImportModal({ projectId, envId, onClose }: Props) {
   const qc = useQueryClient()
@@ -24,7 +25,9 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
 
   // Manual mode
   const [manual, setManual] = useState({
-    host: '', port: 22, username: '', private_key: '', path: '',
+    host: '', port: 22, username: '',
+    auth_type: 'key' as AuthType,
+    private_key: '', password: '', path: '',
   })
 
   const [fetchError, setFetchError] = useState('')
@@ -48,7 +51,11 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
       const params =
         mode === 'saved'
           ? { credential_id: selectedCredId, path: remotePath }
-          : { host: manual.host, port: manual.port, username: manual.username, private_key: manual.private_key, path: manual.path }
+          : {
+              host: manual.host, port: manual.port, username: manual.username,
+              auth_type: manual.auth_type, path: manual.path,
+              ...(manual.auth_type === 'key' ? { private_key: manual.private_key } : { password: manual.password }),
+            }
       return secretsApi.sshFetch(projectId, envId, params)
     },
     onSuccess: (res) => {
@@ -71,7 +78,10 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
   const canFetch =
     mode === 'saved'
       ? Boolean(selectedCredId && remotePath)
-      : Boolean(manual.host && manual.username && manual.private_key && manual.path)
+      : Boolean(
+          manual.host && manual.username && manual.path &&
+          (manual.auth_type === 'key' ? manual.private_key : manual.password)
+        )
 
   const displayHost = mode === 'saved' ? (selectedCred?.host ?? '') : manual.host
   const displayPath = mode === 'saved' ? remotePath : manual.path
@@ -194,15 +204,39 @@ export default function SSHImportModal({ projectId, envId, onClose }: Props) {
                       value={manual.username} onChange={setManualField('username')} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      SSH Private Key *
-                      <span className="font-normal text-gray-400 ml-1">(PEM — RSA, ECDSA or Ed25519)</span>
-                    </label>
-                    <textarea className="input font-mono text-xs resize-none" rows={6}
-                      required spellCheck={false}
-                      placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
-                      value={manual.private_key} onChange={setManualField('private_key')} />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Authentication</label>
+                    <div className="flex rounded-lg border overflow-hidden text-sm">
+                      <button type="button"
+                        onClick={() => setManual(m => ({ ...m, auth_type: 'key' }))}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 transition-colors ${manual.auth_type === 'key' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <KeyRound size={13} /> SSH Key
+                      </button>
+                      <button type="button"
+                        onClick={() => setManual(m => ({ ...m, auth_type: 'password' }))}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 transition-colors ${manual.auth_type === 'password' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <Lock size={13} /> Password
+                      </button>
+                    </div>
                   </div>
+                  {manual.auth_type === 'key' ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        SSH Private Key *
+                        <span className="font-normal text-gray-400 ml-1">(PEM — RSA, ECDSA or Ed25519)</span>
+                      </label>
+                      <textarea className="input font-mono text-xs resize-none" rows={5}
+                        required spellCheck={false}
+                        placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+                        value={manual.private_key} onChange={setManualField('private_key')} />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                      <input className="input" type="password" required autoComplete="off"
+                        placeholder="••••••••••••"
+                        value={manual.password} onChange={setManualField('password')} />
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Remote file path *</label>
                     <input className="input font-mono" required placeholder="/home/ubuntu/myapp/.env"

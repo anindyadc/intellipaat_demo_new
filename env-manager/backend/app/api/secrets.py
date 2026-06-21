@@ -317,25 +317,32 @@ class SSHFetchRequest(BaseModel):
     host: str | None = None
     port: int = 22
     username: str | None = None
+    auth_type: str = "key"        # "key" or "password"
     private_key: str | None = None
+    password: str | None = None
     path: str
 
 
-def _ssh_read_file(host: str, port: int, username: str, private_key_text: str, path: str) -> str:
+def _ssh_read_file(
+    host: str, port: int, username: str, path: str,
+    *, private_key_text: str | None = None, password: str | None = None,
+) -> str:
     """Blocking SSH/SFTP read — runs inside asyncio.to_thread."""
     try:
         import paramiko
     except ImportError:
         raise RuntimeError("paramiko is not installed")
 
-    key_file = io.StringIO(private_key_text.strip())
-    pkey = paramiko.PKey.from_private_key(key_file)
-
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
-        client.connect(host, port=port, username=username, pkey=pkey, timeout=10,
-                       allow_agent=False, look_for_keys=False)
+        if private_key_text:
+            pkey = paramiko.PKey.from_private_key(io.StringIO(private_key_text.strip()))
+            client.connect(host, port=port, username=username, pkey=pkey, timeout=10,
+                           allow_agent=False, look_for_keys=False)
+        else:
+            client.connect(host, port=port, username=username, password=password, timeout=10,
+                           allow_agent=False, look_for_keys=False)
         sftp = client.open_sftp()
         try:
             with sftp.open(path) as fh:
@@ -360,7 +367,9 @@ async def fetch_from_ssh(
     if ".." in payload.path:
         raise HTTPException(status_code=400, detail="Path must not contain '..'")
 
-    # Resolve connection params — either from a saved credential or inline fields
+    private_key: str | None = None
+    password: str | None = None
+
     if payload.credential_id:
         from app.models.ssh_credential import SSHCredential
         cred_result = await db.execute(
@@ -372,23 +381,34 @@ async def fetch_from_ssh(
         cred = cred_result.scalar_one_or_none()
         if not cred:
             raise HTTPException(status_code=404, detail="SSH credential not found")
-        from app.core.encryption import get_encryption_service as _enc
-        enc2 = _enc()
-        host = cred.host
-        port = cred.port
-        username = cred.username
-        private_key = enc2.decrypt(cred.encrypted_private_key)
+        enc2 = get_encryption_service()
+        host, port, username = cred.host, cred.port, cred.username
+        if cred.auth_type == "password":
+            password = enc2.decrypt(cred.encrypted_password)
+        else:
+            private_key = enc2.decrypt(cred.encrypted_private_key)
     else:
-        if not payload.host or not payload.username or not payload.private_key:
+        if not payload.host or not payload.username:
             raise HTTPException(
                 status_code=400,
-                detail="Provide either credential_id or host + username + private_key",
+                detail="Provide either credential_id or host + username",
             )
-        host, port, username, private_key = payload.host, payload.port, payload.username, payload.private_key
+        host, port, username = payload.host, payload.port, payload.username
+        if payload.auth_type == "password":
+            if not payload.password:
+                raise HTTPException(status_code=400, detail="password is required for password auth")
+            password = payload.password
+        else:
+            if not payload.private_key:
+                raise HTTPException(status_code=400, detail="private_key is required for key auth")
+            private_key = payload.private_key
 
     try:
         content = await asyncio.wait_for(
-            asyncio.to_thread(_ssh_read_file, host, port, username, private_key, payload.path),
+            asyncio.to_thread(
+                _ssh_read_file, host, port, username, payload.path,
+                private_key_text=private_key, password=password,
+            ),
             timeout=20,
         )
     except asyncio.TimeoutError:

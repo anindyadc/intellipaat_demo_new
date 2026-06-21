@@ -85,7 +85,8 @@ export interface SSHCredential {
   host: string
   port: number
   username: string
-  has_key: boolean
+  auth_type: 'key' | 'password'
+  has_credential: boolean
 }
 
 export interface TokenResponse {

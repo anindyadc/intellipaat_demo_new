@@ -2,7 +2,19 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sshCredentialsApi } from '../api/client'
 import type { SSHCredential } from '../types'
-import { Server, Plus, Pencil, Trash2, X, Check, KeyRound } from 'lucide-react'
+import { Server, Plus, Pencil, Trash2, X, Check, KeyRound, Lock } from 'lucide-react'
+
+type AuthType = 'key' | 'password'
+
+interface FormState {
+  label: string
+  host: string
+  port: number
+  username: string
+  auth_type: AuthType
+  private_key: string
+  password: string
+}
 
 function CredentialForm({
   initial,
@@ -12,32 +24,30 @@ function CredentialForm({
   error,
 }: {
   initial?: Partial<SSHCredential>
-  onSave: (data: {
-    label: string; host: string; port: number; username: string; private_key: string
-  }) => void
+  onSave: (data: FormState) => void
   onCancel: () => void
   isPending: boolean
   error: string
 }) {
-  const [form, setForm] = useState({
+  const isEdit = Boolean(initial?.id)
+  const [form, setForm] = useState<FormState>({
     label: initial?.label ?? '',
     host: initial?.host ?? '',
     port: initial?.port ?? 22,
     username: initial?.username ?? '',
+    auth_type: (initial?.auth_type as AuthType) ?? 'key',
     private_key: '',
+    password: '',
   })
 
-  const set = (field: keyof typeof form) => (
+  const set = (field: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => setForm(f => ({ ...f, [field]: field === 'port' ? Number(e.target.value) : e.target.value }))
 
-  const isEdit = Boolean(initial?.id)
+  const setAuthType = (t: AuthType) => setForm(f => ({ ...f, auth_type: t }))
 
   return (
-    <form
-      onSubmit={e => { e.preventDefault(); onSave(form) }}
-      className="space-y-4"
-    >
+    <form onSubmit={e => { e.preventDefault(); onSave(form) }} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Label *</label>
         <input className="input" required placeholder="Production zenpi server"
@@ -63,23 +73,60 @@ function CredentialForm({
           value={form.username} onChange={set('username')} />
       </div>
 
+      {/* Auth type toggle */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          SSH Private Key {isEdit ? <span className="font-normal text-gray-400">(leave blank to keep existing)</span> : '*'}
-        </label>
-        <textarea
-          className="input font-mono text-xs resize-none"
-          rows={7}
-          required={!isEdit}
-          spellCheck={false}
-          placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
-          value={form.private_key}
-          onChange={set('private_key')}
-        />
-        <p className="text-xs text-gray-400 mt-1">
-          Stored encrypted at rest using AES-256. Never returned after saving.
-        </p>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Authentication</label>
+        <div className="flex rounded-lg border overflow-hidden text-sm">
+          <button
+            type="button"
+            onClick={() => setAuthType('key')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${form.auth_type === 'key' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <KeyRound size={14} /> SSH Private Key
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthType('password')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 transition-colors ${form.auth_type === 'password' ? 'bg-brand-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
+            <Lock size={14} /> Password
+          </button>
+        </div>
       </div>
+
+      {form.auth_type === 'key' ? (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Private Key {isEdit ? <span className="font-normal text-gray-400">(leave blank to keep existing)</span> : '*'}
+          </label>
+          <textarea
+            className="input font-mono text-xs resize-none"
+            rows={7}
+            required={!isEdit}
+            spellCheck={false}
+            placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+            value={form.private_key}
+            onChange={set('private_key')}
+          />
+          <p className="text-xs text-gray-400 mt-1">Stored encrypted at rest. Never returned after saving.</p>
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Password {isEdit ? <span className="font-normal text-gray-400">(leave blank to keep existing)</span> : '*'}
+          </label>
+          <input
+            className="input"
+            type="password"
+            required={!isEdit}
+            autoComplete="new-password"
+            placeholder="••••••••••••"
+            value={form.password}
+            onChange={set('password')}
+          />
+          <p className="text-xs text-gray-400 mt-1">Stored encrypted at rest. Never returned after saving.</p>
+        </div>
+      )}
 
       {error && (
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg">{error}</p>
@@ -95,18 +142,17 @@ function CredentialForm({
   )
 }
 
-function CredentialModal({
-  initial,
-  onClose,
-}: {
-  initial?: SSHCredential
-  onClose: () => void
-}) {
+function CredentialModal({ initial, onClose }: { initial?: SSHCredential; onClose: () => void }) {
   const qc = useQueryClient()
   const [error, setError] = useState('')
 
   const createMutation = useMutation({
-    mutationFn: sshCredentialsApi.create,
+    mutationFn: (data: FormState) =>
+      sshCredentialsApi.create({
+        label: data.label, host: data.host, port: data.port, username: data.username,
+        auth_type: data.auth_type,
+        ...(data.auth_type === 'key' ? { private_key: data.private_key } : { password: data.password }),
+      }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['ssh-credentials'] }); onClose() },
     onError: (err: any) => setError(err.response?.data?.detail || 'Failed to save'),
   })
@@ -117,20 +163,20 @@ function CredentialModal({
     onError: (err: any) => setError(err.response?.data?.detail || 'Failed to update'),
   })
 
-  const handleSave = (data: { label: string; host: string; port: number; username: string; private_key: string }) => {
+  const handleSave = (data: FormState) => {
     setError('')
     if (initial) {
       const payload: Record<string, unknown> = {
-        label: data.label, host: data.host, port: data.port, username: data.username,
+        label: data.label, host: data.host, port: data.port,
+        username: data.username, auth_type: data.auth_type,
       }
-      if (data.private_key.trim()) payload.private_key = data.private_key
+      if (data.auth_type === 'key' && data.private_key.trim()) payload.private_key = data.private_key
+      if (data.auth_type === 'password' && data.password) payload.password = data.password
       updateMutation.mutate({ id: initial.id, data: payload })
     } else {
       createMutation.mutate(data)
     }
   }
-
-  const isPending = createMutation.isPending || updateMutation.isPending
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -144,7 +190,7 @@ function CredentialModal({
             initial={initial}
             onSave={handleSave}
             onCancel={onClose}
-            isPending={isPending}
+            isPending={createMutation.isPending || updateMutation.isPending}
             error={error}
           />
         </div>
@@ -157,7 +203,7 @@ export default function SSHServers() {
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<SSHCredential | null>(null)
-  const [deleted, setDeleted] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const { data: credentials = [], isLoading } = useQuery<SSHCredential[]>({
     queryKey: ['ssh-credentials'],
@@ -166,7 +212,7 @@ export default function SSHServers() {
 
   const deleteMutation = useMutation({
     mutationFn: sshCredentialsApi.delete,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ssh-credentials'] }); setDeleted(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ssh-credentials'] }); setConfirmDelete(null) },
   })
 
   return (
@@ -192,7 +238,7 @@ export default function SSHServers() {
           <Server className="mx-auto text-gray-300 mb-3" size={40} />
           <p className="text-gray-500 font-medium mb-1">No SSH servers saved yet</p>
           <p className="text-sm text-gray-400 mb-4">
-            Add a server to quickly import .env files without pasting keys each time.
+            Add a server to quickly import .env files without entering credentials each time.
           </p>
           <button onClick={() => setShowAdd(true)} className="btn-primary">
             <Plus size={15} /> Add Your First Server
@@ -207,7 +253,8 @@ export default function SSHServers() {
                 <th className="py-3 px-4">Host</th>
                 <th className="py-3 px-4">Port</th>
                 <th className="py-3 px-4">Username</th>
-                <th className="py-3 px-4">Key</th>
+                <th className="py-3 px-4">Auth</th>
+                <th className="py-3 px-4">Credential</th>
                 <th className="py-3 px-4"></th>
               </tr>
             </thead>
@@ -219,7 +266,13 @@ export default function SSHServers() {
                   <td className="py-3 px-4 text-sm text-gray-500">{cred.port}</td>
                   <td className="py-3 px-4 text-sm text-gray-600">{cred.username}</td>
                   <td className="py-3 px-4">
-                    {cred.has_key ? (
+                    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${cred.auth_type === 'key' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                      {cred.auth_type === 'key' ? <KeyRound size={11} /> : <Lock size={11} />}
+                      {cred.auth_type === 'key' ? 'SSH Key' : 'Password'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    {cred.has_credential ? (
                       <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
                         <Check size={11} /> Saved
                       </span>
@@ -229,36 +282,26 @@ export default function SSHServers() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-                      <button
-                        onClick={() => setEditing(cred)}
-                        className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded"
-                        title="Edit"
-                      >
+                      <button onClick={() => setEditing(cred)}
+                        className="p-1.5 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded" title="Edit">
                         <Pencil size={13} />
                       </button>
-                      {deleted === cred.id ? (
+                      {confirmDelete === cred.id ? (
                         <div className="flex items-center gap-1">
                           <span className="text-xs text-red-600">Sure?</span>
-                          <button
-                            onClick={() => deleteMutation.mutate(cred.id)}
+                          <button onClick={() => deleteMutation.mutate(cred.id)}
                             disabled={deleteMutation.isPending}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded text-xs font-medium"
-                          >
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded text-xs font-medium">
                             Yes
                           </button>
-                          <button
-                            onClick={() => setDeleted(null)}
-                            className="p-1.5 text-gray-400 hover:bg-gray-100 rounded"
-                          >
+                          <button onClick={() => setConfirmDelete(null)}
+                            className="p-1.5 text-gray-400 hover:bg-gray-100 rounded">
                             <X size={13} />
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => setDeleted(cred.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                          title="Delete"
-                        >
+                        <button onClick={() => setConfirmDelete(cred.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" title="Delete">
                           <Trash2 size={13} />
                         </button>
                       )}
@@ -274,8 +317,8 @@ export default function SSHServers() {
       <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg flex gap-3">
         <KeyRound size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-amber-800">
-          Private keys are encrypted at rest with AES-256 and are never returned by the API.
-          They are used only when you trigger an "Import from Server" action.
+          Private keys and passwords are encrypted at rest with AES-256 and are never returned by the API.
+          They are decrypted only when you trigger an "Import from Server" action.
         </p>
       </div>
 
